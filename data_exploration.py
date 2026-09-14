@@ -46,17 +46,11 @@ for i in range(parquet_file.num_row_groups):
 
     df = parquet_file.read_row_group(i).to_pandas()
 
-    # -----------------------------
-    # Missing values
-    # -----------------------------
-
+# Missing counts
     missing_counts += df.isna().sum()
 
 
-    # -----------------------------
-    # Negative and zero sales
-    # -----------------------------
-
+#Negative dollars
     negative_dollars += (df["sales_dollars"] < 0).sum()
     zero_dollars += (df["sales_dollars"] == 0).sum()
 
@@ -69,9 +63,7 @@ for i in range(parquet_file.num_row_groups):
     ).sum()
 
 
-    # -----------------------------
-    # Zero liters but positive sales
-    # -----------------------------
+#Zero liters but positive sales
 
     problem = (
         (df["sales_liters"] == 0) &
@@ -91,9 +83,6 @@ for i in range(parquet_file.num_row_groups):
     ).sum()
 
 
-    # -----------------------------
-    # Count zero-liter problems by year
-    # -----------------------------
 
     problem_rows = df[problem].copy()
 
@@ -113,9 +102,7 @@ for i in range(parquet_file.num_row_groups):
             )
 
 
-    # -----------------------------
-    # Save 20 example problem rows
-    # -----------------------------
+#20 examples
 
     weird = df[
         problem &
@@ -138,9 +125,7 @@ for i in range(parquet_file.num_row_groups):
         )
 
 
-# ==================================================
-# RESULTS
-# ==================================================
+#Results
 
 print("\n--- Unusual Values ---")
 
@@ -181,9 +166,7 @@ print(
 )
 
 
-# ==================================================
-# MISSING VALUES
-# ==================================================
+#Missing values
 
 print("\n--- Missing Values ---")
 
@@ -212,9 +195,6 @@ print(
 )
 
 
-# ==================================================
-# ZERO LITER PROBLEMS BY YEAR
-# ==================================================
 
 print("\n--- Zero Liter Problems by Year ---")
 
@@ -226,9 +206,7 @@ for year in sorted(zero_liters_by_year):
     )
 
 
-# ==================================================
-# EXAMPLE PROBLEM ROWS
-# ==================================================
+#Example solutions
 
 print("\n--- Zero Liter Examples ---")
 

@@ -3,9 +3,6 @@ import pyarrow as pa
 import pandas as pd
 from pathlib import Path
 
-# --------------------------------------------------
-# Files
-# --------------------------------------------------
 
 input_file = Path(
     "data_actually_clean/iowa_liquor_sales_combined.parquet"
@@ -18,9 +15,6 @@ output_file = Path(
 parquet_file = pq.ParquetFile(input_file)
 
 
-# --------------------------------------------------
-# Counters
-# --------------------------------------------------
 
 starting_rows = parquet_file.metadata.num_rows
 
@@ -31,9 +25,7 @@ fixed_liters = 0
 writer = None
 
 
-# --------------------------------------------------
-# Clean one row group at a time
-# --------------------------------------------------
+# Clean row by row, parquet feature
 
 for i in range(parquet_file.num_row_groups):
 
@@ -45,9 +37,7 @@ for i in range(parquet_file.num_row_groups):
     df = parquet_file.read_row_group(i).to_pandas()
 
 
-    # --------------------------------------------------
-    # 1. Drop columns that are ~90% missing
-    # --------------------------------------------------
+    #Drop state bottle cost and state bottle retail, there is so little data about both there is no point in keeping them
 
     df = df.drop(
         columns=[
@@ -57,9 +47,7 @@ for i in range(parquet_file.num_row_groups):
     )
 
 
-    # --------------------------------------------------
-    # 2. Convert date
-    # --------------------------------------------------
+    # Convert date
 
     df["ordered_on"] = pd.to_datetime(
         df["ordered_on"],
@@ -67,9 +55,7 @@ for i in range(parquet_file.num_row_groups):
     )
 
 
-    # --------------------------------------------------
-    # 3. Drop rows missing sales dollars
-    # --------------------------------------------------
+    #Drop rows missing sales dollars, there are so few of them they're worth dropping
 
     missing_sales = df["sales_dollars"].isna()
 
@@ -78,11 +64,7 @@ for i in range(parquet_file.num_row_groups):
     df = df[~missing_sales].copy()
 
 
-    # --------------------------------------------------
-    # 4. Drop rows missing county information
-    #
-    # We need county for our county-level analysis.
-    # --------------------------------------------------
+    #Drop rows without county level information
 
     missing_county = (
         df["county_fips_code"].isna() |
@@ -94,15 +76,7 @@ for i in range(parquet_file.num_row_groups):
     df = df[~missing_county].copy()
 
 
-    # --------------------------------------------------
-    # 5. Fix incorrect zero-liter transactions
-    #
-    # EDA showed many transactions, mostly in
-    # 2025-2026, with positive dollar sales but
-    # sales_liters recorded as zero.
-    #
-    # liters = bottle volume (mL) * bottles / 1000
-    # --------------------------------------------------
+    # Fix zero liter transactions
 
     fix = (
         (df["sales_liters"] == 0) &
@@ -120,20 +94,11 @@ for i in range(parquet_file.num_row_groups):
     )
 
 
-    # --------------------------------------------------
-    # 6. Keep negative sales
-    #
-    # Negative dollars and liters usually occurred
-    # together, suggesting returns/corrections.
-    # --------------------------------------------------
-
-    # No code needed.
-    # We intentionally leave these rows in the dataset.
+    #Keep negative sales, they're rollbacks
+   
 
 
-    # --------------------------------------------------
-    # 7. Write cleaned row group
-    # --------------------------------------------------
+
 
     table = pa.Table.from_pandas(
         df,
@@ -151,17 +116,13 @@ for i in range(parquet_file.num_row_groups):
     writer.write_table(table)
 
 
-# --------------------------------------------------
-# Close output file
-# --------------------------------------------------
+#Output file
 
 if writer is not None:
     writer.close()
 
 
-# --------------------------------------------------
-# Print cleaning summary
-# --------------------------------------------------
+#Summary
 
 ending_rows = (
     starting_rows
