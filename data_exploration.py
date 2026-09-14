@@ -73,14 +73,10 @@ for i in range(parquet_file.num_row_groups):
     zero_liters_positive_dollars += problem.sum()
 
     zero_liters_zero_volume += (
-        problem &
-        (df["bottle_volume_ml"] == 0)
-    ).sum()
+        problem & (df["bottle_volume_ml"] == 0)).sum()
 
     zero_liters_positive_volume += (
-        problem &
-        (df["bottle_volume_ml"] > 0)
-    ).sum()
+        problem & (df["bottle_volume_ml"] > 0)).sum()
 
 
 
@@ -88,22 +84,17 @@ for i in range(parquet_file.num_row_groups):
 
     if len(problem_rows) > 0:
 
-        problem_rows["year"] = pd.to_datetime(
-            problem_rows["ordered_on"]
-        ).dt.year
+        problem_rows["year"] = pd.to_datetime(problem_rows["ordered_on"]).dt.year
 
         counts = problem_rows["year"].value_counts()
 
         for year, count in counts.items():
 
-            zero_liters_by_year[year] = (
-                zero_liters_by_year.get(year, 0)
-                + count
+            zero_liters_by_year[year] = (zero_liters_by_year.get(year, 0) + count
             )
 
 
 #20 examples
-
     weird = df[
         problem &
         (df["bottle_volume_ml"] > 0)
@@ -126,8 +117,6 @@ for i in range(parquet_file.num_row_groups):
 
 
 #Results
-
-print("\n--- Unusual Values ---")
 
 print("Negative sales dollars:", negative_dollars)
 print("Zero sales dollars:", zero_dollars)
@@ -168,7 +157,7 @@ print(
 
 #Missing values
 
-print("\n--- Missing Values ---")
+print("Missing Values")
 
 print(
     missing_counts.sort_values(
@@ -186,7 +175,7 @@ missing_percent = (
     * 100
 )
 
-print("\n--- Percent Missing ---")
+print("\Percent missing")
 
 print(
     missing_percent
@@ -196,7 +185,7 @@ print(
 
 
 
-print("\n--- Zero Liter Problems by Year ---")
+print("Zero liter problems per year")
 
 for year in sorted(zero_liters_by_year):
 
@@ -206,9 +195,8 @@ for year in sorted(zero_liters_by_year):
     )
 
 
-#Example solutions
 
-print("\n--- Zero Liter Examples ---")
+print("Example solutions")
 
 examples = pd.DataFrame(weird_examples)
 

@@ -42,17 +42,14 @@ for i in range(parquet_file.num_row_groups):
     df = df.drop(
         columns=[
             "state_bottle_cost",
-            "state_bottle_retail"
-        ]
-    )
+            "state_bottle_retail" ] )
 
 
     # Convert date
 
     df["ordered_on"] = pd.to_datetime(
         df["ordered_on"],
-        errors="coerce"
-    )
+        errors="coerce")
 
 
     #Drop rows missing sales dollars, there are so few of them they're worth dropping
@@ -65,53 +62,31 @@ for i in range(parquet_file.num_row_groups):
 
 
     #Drop rows without county level information
-
     missing_county = (
-        df["county_fips_code"].isna() |
-        df["county_name"].isna()
-    )
+        df["county_fips_code"].isna() | df["county_name"].isna() )
 
     dropped_missing_county += missing_county.sum()
 
     df = df[~missing_county].copy()
 
-
     # Fix zero liter transactions
-
     fix = (
-        (df["sales_liters"] == 0) &
-        (df["sales_dollars"] > 0) &
-        (df["bottle_volume_ml"] > 0) &
-        (df["sales_bottles"] > 0)
-    )
+        (df["sales_liters"] == 0) & (df["sales_dollars"] > 0) &
+        (df["bottle_volume_ml"] > 0) & (df["sales_bottles"] > 0))
 
     fixed_liters += fix.sum()
 
-    df.loc[fix, "sales_liters"] = (
-        df.loc[fix, "bottle_volume_ml"]
-        * df.loc[fix, "sales_bottles"]
-        / 1000
+    df.loc[fix, "sales_liters"] = (df.loc[fix, "bottle_volume_ml"]
+        * df.loc[fix, "sales_bottles"] / 1000
     )
-
-
     #Keep negative sales, they're rollbacks
-   
-
-
-
-
     table = pa.Table.from_pandas(
-        df,
-        preserve_index=False
+        df, preserve_index=False
     )
 
     if writer is None:
-
-        writer = pq.ParquetWriter(
-            output_file,
-            table.schema,
-            compression="snappy"
-        )
+        writer = pq.ParquetWriter(output_file, table.schema,
+                                  compression="snappy")
 
     writer.write_table(table)
 
@@ -125,25 +100,17 @@ if writer is not None:
 #Summary
 
 ending_rows = (
-    starting_rows
-    - dropped_missing_sales
-    - dropped_missing_county
+    starting_rows - dropped_missing_sales - dropped_missing_county
 )
 
-print("\n==============================")
-print("CLEANING COMPLETE")
-print("==============================")
 
 print("Starting rows:", starting_rows)
 
 print(
-    "Dropped for missing sales dollars:",
-    dropped_missing_sales
-)
+    "Dropped for missing sales dollars:", dropped_missing_sales )
 
 print(
-    "Dropped for missing county:",
-    dropped_missing_county
+    "Dropped for missing county:", dropped_missing_county
 )
 
 print(
