@@ -1,4 +1,5 @@
 data/
 data_intermediate/
 data_actually_clean/iowa_liquor_sales_combined.parquet
-external_data/
+external_data/*.parquet
+data_actually_clean/
