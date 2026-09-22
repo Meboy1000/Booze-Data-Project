@@ -9,7 +9,7 @@ from pathlib import Path
 import pandas as pd
 import pyarrow.dataset as ds
 
-ALCOHOL_PATH = Path(__file__).parent / "data_actually_clean" / "iowa_liquor_sales_combined.parquet"
+ALCOHOL_PATH = Path(__file__).parent / "data_actually_clean" / "iowa_liquor_sales_cleaned.parquet"
 EXTERNAL_DIR = Path(__file__).parent / "external_data_clean"
 OUTPUT_PATH = Path(__file__).parent / "data_actually_clean" / "county_month_combined.parquet"
 
@@ -30,28 +30,149 @@ def expand_year_to_months(df: pd.DataFrame, year_col: str) -> pd.DataFrame:
 
 
 def load_alcohol_by_county_month() -> pd.DataFrame:
-    """Aggregate the (large) alcohol sales file to one row per county-month.
-
-    Processed in batches so the whole multi-GB file is never held in memory at once.
+    """Aggregate alcohol sales to one row per county-month,
+    while also counting unique active stores.
     """
-    columns = ["county_name", "ordered_on", "sales_dollars", "sales_bottles", "sales_liters", "sales_gallons"]
-    dataset = ds.dataset(ALCOHOL_PATH, format="parquet")
+
+    columns = [
+        "county_name",
+        "ordered_on",
+        "store_no",
+        "sales_dollars",
+        "sales_bottles",
+        "sales_liters",
+        "sales_gallons"
+    ]
+
+    dataset = ds.dataset(
+        ALCOHOL_PATH,
+        format="parquet"
+    )
 
     totals = None
-    for batch in dataset.to_batches(columns=columns, batch_size=1_000_000):
+
+    # Save unique county-month-store combinations from each batch
+    store_records = []
+
+    for batch in dataset.to_batches(
+        columns=columns,
+        batch_size=1_000_000
+    ):
+
         df = batch.to_pandas()
-        df["county"] = df["county_name"].map(normalize_county)
-        df["year_month"] = df["ordered_on"].str.slice(0, 7)
-        batch_totals = df.groupby(["county", "year_month"], as_index=False).agg(
-            sales_dollars=("sales_dollars", "sum"),
-            sales_bottles=("sales_bottles", "sum"),
-            sales_liters=("sales_liters", "sum"),
-            sales_gallons=("sales_gallons", "sum"),
+
+        df["ordered_on"] = pd.to_datetime(
+            df["ordered_on"],
+            errors="coerce"
         )
+
+        df["county"] = (
+            df["county_name"]
+            .map(normalize_county)
+        )
+
+        df["year_month"] = (
+            df["ordered_on"]
+            .dt.to_period("M")
+            .astype(str)
+        )
+
+        # -----------------------------
+        # Sales aggregation
+        # -----------------------------
+        batch_totals = (
+            df.groupby(
+                ["county", "year_month"],
+                as_index=False
+            )
+            .agg(
+                sales_dollars=(
+                    "sales_dollars",
+                    "sum"
+                ),
+                sales_bottles=(
+                    "sales_bottles",
+                    "sum"
+                ),
+                sales_liters=(
+                    "sales_liters",
+                    "sum"
+                ),
+                sales_gallons=(
+                    "sales_gallons",
+                    "sum"
+                )
+            )
+        )
+
         if totals is None:
             totals = batch_totals
+
         else:
-            totals = pd.concat([totals, batch_totals]).groupby(["county", "year_month"], as_index=False).sum()
+            totals = (
+                pd.concat(
+                    [totals, batch_totals],
+                    ignore_index=True
+                )
+                .groupby(
+                    ["county", "year_month"],
+                    as_index=False
+                )
+                .sum()
+            )
+
+        # -----------------------------
+        # Store tracking
+        # -----------------------------
+        batch_stores = (
+            df[
+                [
+                    "county",
+                    "year_month",
+                    "store_no"
+                ]
+            ]
+            .dropna(subset=["store_no"])
+            .drop_duplicates()
+        )
+
+        store_records.append(batch_stores)
+
+    # Combine store records from all batches
+    all_stores = pd.concat(
+        store_records,
+        ignore_index=True
+    )
+
+    # Important:
+    # the same store can appear in multiple batches
+    all_stores = all_stores.drop_duplicates(
+        subset=[
+            "county",
+            "year_month",
+            "store_no"
+        ]
+    )
+
+    # Count unique active stores in each county-month
+    store_counts = (
+        all_stores
+        .groupby(
+            ["county", "year_month"]
+        )
+        ["store_no"]
+        .nunique()
+        .reset_index(
+            name="num_stores"
+        )
+    )
+
+    # Merge store counts onto sales totals
+    totals = totals.merge(
+        store_counts,
+        on=["county", "year_month"],
+        how="left"
+    )
 
     return totals
 
@@ -89,9 +210,14 @@ def load_employment() -> pd.DataFrame:
 
 if __name__ == "__main__":
     combined = load_alcohol_by_county_month()
-    for loader in (load_breathalcohol, load_population, load_employment):
+    for loader in (load_breathalcohol, load_population):
         combined = combined.merge(loader(), on=["county", "year_month"], how="left")
 
     OUTPUT_PATH.parent.mkdir(exist_ok=True)
+    print("Input file:")
+    print(ALCOHOL_PATH.resolve())
+
+    print("\nOutput file:")
+    print(OUTPUT_PATH.resolve())
     combined.to_parquet(OUTPUT_PATH, index=False)
     print(f"wrote {len(combined)} rows -> {OUTPUT_PATH.relative_to(Path(__file__).parent)}")
